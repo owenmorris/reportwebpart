@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSRS Report Height Measurement Tool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+
+        .input-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        button {
+            background: #0078d4;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #106ebe;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .result-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #0078d4;
+        }
+
+        .result-item.success {
+            border-left-color: #107c10;
+        }
+
+        .result-item.error {
+            border-left-color: #d13438;
+        }
+
+        .result-item h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .height-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #107c10;
+            margin: 10px 0;
+        }
+
+        .error-message {
+            color: #d13438;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .progress {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e6f4ff;
+            border-radius: 4px;
+        }
+
+        #measurementFrame {
+            position: absolute;
+            top: -10000px;
+            left: -10000px;
+            width: 100%;
+            border: none;
+        }
+
+        .copy-button {
+            background: #6c757d;
+            font-size: 12px;
+            padding: 6px 12px;
+            margin-left: 10px;
+        }
+
+        .copy-button:hover {
+            background: #5a6268;
+        }
+
+        .summary {
+            background: #e6f4ff;
+            padding: 20px;
+            border-radius: 4px;
+            margin-top: 30px;
+        }
+
+        .summary h2 {
+            margin-top: 0;
+        }
+
+        .summary pre {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+
+        .info-box {
+            background: #fff4ce;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffb900;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SSRS Report Height Measurement Tool</h1>
+
+        <div class="info-box">
+            <strong>Important:</strong> This tool must be run on the same domain as your SSRS server, or you need to disable CORS in your browser for testing.
+            The iframe needs to access the report content to measure height.
+        </div>
+
+        <div class="input-section">
+            <label for="reportUrls">Report URLs (one per line)</label>
+            <textarea id="reportUrls" placeholder="https://reportserver/ReportServer?/Sales/MonthlySummary&#10;https://reportserver/ReportServer?/HR/EmployeeReport&#10;https://reportserver/ReportServer?/Finance/QuarterlySummary"></textarea>
+        </div>
+
+        <div class="input-section">
+            <label for="waitTime">Wait Time (seconds) - Time to wait for report to fully load</label>
+            <input type="text" id="waitTime" value="3" placeholder="3">
+        </div>
+
+        <div class="input-section">
+            <label>
+                <input type="checkbox" id="embedMode" checked>
+                Add rs:Embed=true (recommended for iframe measurements)
+            </label>
+        </div>
+
+        <div class="input-section">
+            <label>
+                <input type="checkbox" id="hideToolbar" checked>
+                Add rc:Toolbar=false
+            </label>
+        </div>
+
+        <div class="input-section">
+            <label>
+                <input type="checkbox" id="hideParameters">
+                Add rc:Parameters=false
+            </label>
+        </div>
+
+        <button id="measureBtn" onclick="measureReports()">Measure Reports</button>
+
+        <div id="progress" class="progress" style="display: none;"></div>
+        <div id="results" class="results"></div>
+        <div id="summary" class="summary" style="display: none;"></div>
+    </div>
+
+    <iframe id="measurementFrame"></iframe>
+
+    <script>
+        let measurements = [];
+
+        function buildUrl(baseUrl, embedMode, hideToolbar, hideParameters) {
+            try {
+                const url = new URL(baseUrl);
+
+                if (embedMode) {
+                    url.searchParams.set('rs:Embed', 'true');
+                }
+
+                if (hideToolbar) {
+                    url.searchParams.set('rc:Toolbar', 'false');
+                }
+
+                if (hideParameters) {
+                    url.searchParams.set('rc:Parameters', 'false');
+                }
+
+                return url.toString();
+            } catch (e) {
+                return baseUrl;
+            }
+        }
+
+        function measureSingleReport(url, waitTime) {
+            return new Promise((resolve) => {
+                const iframe = document.getElementById('measurementFrame');
+                const embedMode = document.getElementById('embedMode').checked;
+                const hideToolbar = document.getElementById('hideToolbar').checked;
+                const hideParameters = document.getElementById('hideParameters').checked;
+
+                const finalUrl = buildUrl(url, embedMode, hideToolbar, hideParameters);
+
+                let timeout;
+                let resolved = false;
+
+                const cleanup = () => {
+                    if (timeout) clearTimeout(timeout);
+                    iframe.onload = null;
+                };
+
+                const attemptMeasure = () => {
+                    if (resolved) return;
+
+                    try {
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+
+                        if (iframeDoc && iframeDoc.body) {
+                            const height = Math.max(
+                                iframeDoc.body.scrollHeight,
+                                iframeDoc.documentElement.scrollHeight,
+                                iframeDoc.body.offsetHeight,
+                                iframeDoc.documentElement.offsetHeight,
+                                iframeDoc.body.clientHeight,
+                                iframeDoc.documentElement.clientHeight
+                            );
+
+                            resolved = true;
+                            cleanup();
+                            resolve({
+                                success: true,
+                                url: url,
+                                finalUrl: finalUrl,
+                                height: height
+                            });
+                        } else {
+                            throw new Error('Cannot access iframe content');
+                        }
+                    } catch (error) {
+                        resolved = true;
+                        cleanup();
+                        resolve({
+                            success: false,
+                            url: url,
+                            finalUrl: finalUrl,
+                            error: error.message + ' - Check CORS/Same-Origin Policy'
+                        });
+                    }
+                };
+
+                iframe.onload = () => {
+                    // Wait for the specified time to let report fully render
+                    timeout = setTimeout(attemptMeasure, waitTime * 1000);
+                };
+
+                // Load the report
+                iframe.src = finalUrl;
+
+                // Fallback timeout
+                setTimeout(() => {
+                    if (!resolved) {
+                        attemptMeasure();
+                    }
+                }, (waitTime + 5) * 1000);
+            });
+        }
+
+        async function measureReports() {
+            const urlsText = document.getElementById('reportUrls').value.trim();
+            const waitTime = parseFloat(document.getElementById('waitTime').value) || 3;
+
+            if (!urlsText) {
+                alert('Please enter at least one report URL');
+                return;
+            }
+
+            const urls = urlsText.split('\n').map(u => u.trim()).filter(u => u);
+
+            measurements = [];
+            const resultsDiv = document.getElementById('results');
+            const progressDiv = document.getElementById('progress');
+            const summaryDiv = document.getElementById('summary');
+            const measureBtn = document.getElementById('measureBtn');
+
+            resultsDiv.innerHTML = '';
+            summaryDiv.style.display = 'none';
+            progressDiv.style.display = 'block';
+            measureBtn.disabled = true;
+
+            for (let i = 0; i < urls.length; i++) {
+                progressDiv.innerHTML = `<strong>Measuring ${i + 1} of ${urls.length}...</strong><br>Current: ${urls[i]}`;
+
+                const result = await measureSingleReport(urls[i], waitTime);
+                measurements.push(result);
+
+                displayResult(result);
+            }
+
+            progressDiv.style.display = 'none';
+            measureBtn.disabled = false;
+            displaySummary();
+        }
+
+        function displayResult(result) {
+            const resultsDiv = document.getElementById('results');
+            const resultItem = document.createElement('div');
+            resultItem.className = `result-item ${result.success ? 'success' : 'error'}`;
+
+            if (result.success) {
+                resultItem.innerHTML = `
+                    <h3>${result.url}</h3>
+                    <div class="height-display">${result.height}px</div>
+                    <small>Full URL: ${result.finalUrl}</small>
+                `;
+            } else {
+                resultItem.innerHTML = `
+                    <h3>${result.url}</h3>
+                    <div class="error-message">Error: ${result.error}</div>
+                `;
+            }
+
+            resultsDiv.appendChild(resultItem);
+        }
+
+        function displaySummary() {
+            const summaryDiv = document.getElementById('summary');
+            const successful = measurements.filter(m => m.success);
+
+            if (successful.length === 0) {
+                summaryDiv.innerHTML = `
+                    <h2>No Successful Measurements</h2>
+                    <p>All measurements failed. This is likely due to:</p>
+                    <ul>
+                        <li>Cross-Origin restrictions (CORS)</li>
+                        <li>X-Frame-Options blocking iframe access</li>
+                        <li>Authentication issues</li>
+                    </ul>
+                    <p><strong>Workaround:</strong> Save this HTML file to your SSRS server and run it from there.</p>
+                `;
+            } else {
+                const csvData = successful.map(m =>
+                    `"${m.url}",${m.height}`
+                ).join('\n');
+
+                const jsonData = JSON.stringify(successful.map(m => ({
+                    url: m.url,
+                    height: m.height
+                })), null, 2);
+
+                summaryDiv.innerHTML = `
+                    <h2>Measurement Summary</h2>
+                    <p>Successfully measured ${successful.length} of ${measurements.length} reports.</p>
+
+                    <h3>CSV Format <button class="copy-button" onclick="copyToClipboard('csv')">Copy</button></h3>
+                    <pre id="csvOutput">${csvData}</pre>
+
+                    <h3>JSON Format <button class="copy-button" onclick="copyToClipboard('json')">Copy</button></h3>
+                    <pre id="jsonOutput">${jsonData}</pre>
+
+                    <h3>Quick Reference</h3>
+                    <ul>
+                        ${successful.map(m => `<li>${m.url.split('/').pop() || m.url}: <strong>${m.height}px</strong></li>`).join('')}
+                    </ul>
+                `;
+            }
+
+            summaryDiv.style.display = 'block';
+        }
+
+        function copyToClipboard(format) {
+            const text = document.getElementById(format + 'Output').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard!');
+            }).catch(err => {
+                alert('Failed to copy: ' + err);
+            });
+        }
+    </script>
+</body>
+</html>

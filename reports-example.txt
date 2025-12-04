@@ -1,0 +1,15 @@
+# SSRS Report URLs to Measure
+# Lines starting with # are ignored
+# One URL per line
+
+# Sales Reports
+https://reportserver/ReportServer?/Sales/MonthlySummary
+https://reportserver/ReportServer?/Sales/YearlySummary
+
+# HR Reports
+https://reportserver/ReportServer?/HR/EmployeeList
+https://reportserver/ReportServer?/HR/AttendanceReport
+
+# Finance Reports
+https://reportserver/ReportServer?/Finance/QuarterlySummary
+https://reportserver/ReportServer?/Finance/BudgetReport
