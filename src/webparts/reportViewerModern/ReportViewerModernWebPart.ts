@@ -5,7 +5,8 @@ import {
   type IPropertyPaneConfiguration,
   PropertyPaneTextField,
   PropertyPaneToggle,
-  PropertyPaneSlider
+  PropertyPaneSlider,
+  PropertyPaneDropdown
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
@@ -19,6 +20,7 @@ export interface IReportViewerModernWebPartProps {
   showParameters: boolean;
   reportParameters: string; // JSON string of key-value pairs
   height: number; // pixels
+  zoom: string; // SSRS zoom value: percentage or 'Page Width' or 'Whole Page'
 }
 
 export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IReportViewerModernWebPartProps> {
@@ -37,6 +39,7 @@ export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IRe
         showParameters: this.properties.showParameters,
         reportParameters: this.properties.reportParameters,
         height: this.properties.height || 800,
+        zoom: this.properties.zoom || '100',
         isDarkTheme: this._isDarkTheme,
         hasTeamsContext: !!this.context.sdks.microsoftTeams
       }
@@ -109,7 +112,20 @@ export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IRe
                 PropertyPaneToggle('showParameters', {
                   label: 'Show Parameters Area',
                   onText: 'Visible',
-                  offText: 'Hidden'
+                  offText: 'Collapsed'
+                }),
+                PropertyPaneDropdown('zoom', {
+                  label: 'Zoom Level',
+                  options: [
+                    { key: 'Page Width', text: 'Page Width' },
+                    { key: 'Whole Page', text: 'Whole Page' },
+                    { key: '50', text: '50%' },
+                    { key: '75', text: '75%' },
+                    { key: '100', text: '100%' },
+                    { key: '125', text: '125%' },
+                    { key: '150', text: '150%' },
+                    { key: '200', text: '200%' }
+                  ]
                 }),
                 PropertyPaneSlider('height', {
                   label: 'Height (pixels)',

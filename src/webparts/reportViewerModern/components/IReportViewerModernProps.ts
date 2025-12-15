@@ -4,6 +4,7 @@ export interface IReportViewerModernProps {
   showParameters: boolean;
   reportParameters: string;
   height: number;
+  zoom: string;
   isDarkTheme: boolean;
   hasTeamsContext: boolean;
 }

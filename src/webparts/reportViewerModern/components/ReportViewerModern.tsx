@@ -3,7 +3,7 @@ import styles from './ReportViewerModern.module.scss';
 import type { IReportViewerModernProps } from './IReportViewerModernProps';
 
 const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
-  const { reportUrl, showToolbar, showParameters, reportParameters, height, hasTeamsContext } = props;
+  const { reportUrl, showToolbar, showParameters, reportParameters, height, zoom, hasTeamsContext } = props;
   const [iframeHeight, setIframeHeight] = React.useState<number>(height);
   const [flash, setFlash] = React.useState<boolean>(false);
   const lastHeightRef = React.useRef<number>(height);
@@ -64,6 +64,8 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
       return '';
     }
 
+    console.log('Building URL with zoom:', zoom);
+
     try {
       // Split the URL to handle SSRS format: base?reportPath&params
       const [baseAndPath, ...existingParams] = reportUrl.split('?');
@@ -77,6 +79,9 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
         }
         if (!showParameters) {
           url.searchParams.set('rc:Parameters', 'Collapsed');
+        }
+        if (zoom) {
+          url.searchParams.set('rc:Zoom', zoom);
         }
 
         if (reportParameters) {
@@ -118,14 +123,16 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
       // Add SSRS control parameters
       // Note: We don't set rs:Command=Render because we want the full ReportViewer.aspx page
       // to load (with its JavaScript), not just the raw report rendering
-      // Note: We don't set rc:Zoom=Whole Page because it would scale the report to fit the viewport,
-      // which prevents us from measuring the true content height for auto-sizing
       params.set('rs:Embed', 'true');
       if (!showToolbar) {
         params.set('rc:Toolbar', 'false');
       }
       if (!showParameters) {
         params.set('rc:Parameters', 'Collapsed');
+      }
+      if (zoom) {
+        console.log('Setting zoom parameter to:', zoom);
+        params.set('rc:Zoom', zoom);
       }
 
       // Add report parameters from props
@@ -164,7 +171,7 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
       console.error('Invalid report URL:', e);
       return reportUrl;
     }
-  }, [reportUrl, showToolbar, showParameters, reportParameters]);
+  }, [reportUrl, showToolbar, showParameters, reportParameters, zoom]);
 
   if (!reportUrl) {
     return (
