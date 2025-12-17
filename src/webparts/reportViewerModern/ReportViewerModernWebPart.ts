@@ -20,6 +20,7 @@ export interface IReportViewerModernWebPartProps {
   showParameters: boolean;
   reportParameters: string; // JSON string of key-value pairs
   height: number; // pixels
+  autoFitHeight: boolean; // auto-fit height based on report content
   zoom: string; // SSRS zoom value: percentage or 'Page Width' or 'Whole Page'
 }
 
@@ -39,6 +40,7 @@ export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IRe
         showParameters: this.properties.showParameters,
         reportParameters: this.properties.reportParameters,
         height: this.properties.height || 800,
+        autoFitHeight: this.properties.autoFitHeight ?? true,
         zoom: this.properties.zoom || '100',
         isDarkTheme: this._isDarkTheme,
         hasTeamsContext: !!this.context.sdks.microsoftTeams
@@ -127,10 +129,15 @@ export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IRe
                     { key: '200', text: '200%' }
                   ]
                 }),
+                PropertyPaneToggle('autoFitHeight', {
+                  label: 'Auto-fit Height',
+                  onText: 'On',
+                  offText: 'Off'
+                }),
                 PropertyPaneSlider('height', {
-                  label: 'Height (pixels)',
+                  label: this.properties.autoFitHeight ? 'Initial Height (pixels)' : 'Height (pixels)',
                   min: 400,
-                  max: 2000,
+                  max: 3000,
                   step: 50,
                   showValue: true
                 })

@@ -3,55 +3,80 @@ import styles from './ReportViewerModern.module.scss';
 import type { IReportViewerModernProps } from './IReportViewerModernProps';
 
 const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
-  const { reportUrl, showToolbar, showParameters, reportParameters, height, zoom, hasTeamsContext } = props;
+  const { reportUrl, showToolbar, showParameters, reportParameters, height, autoFitHeight, zoom, hasTeamsContext } = props;
   const [iframeHeight, setIframeHeight] = React.useState<number>(height);
-  const [flash, setFlash] = React.useState<boolean>(false);
   const lastHeightRef = React.useRef<number>(height);
 
-  // Listen for postMessage from SSRS iframe to get content height
-  React.useEffect(() => {
-    const handlePostMessage = (event: MessageEvent): void => {
-      // Log all messages for debugging
-      console.log('Received postMessage:', {
-        origin: event.origin,
-        data: event.data,
-        source: event.source
-      });
+  // Track whether we should allow height shrinking (reset when display settings change)
+  const allowShrinkRef = React.useRef<boolean>(false);
+  const shrinkTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Reset height tracking when display settings change (zoom, toolbar, params)
+  // This allows the height to shrink when these settings legitimately change the content size
+  React.useEffect(() => {
+    allowShrinkRef.current = true;
+    lastHeightRef.current = height;
+
+    // Keep allowing shrinks for 5 seconds after settings change to catch delayed updates
+    if (shrinkTimeoutRef.current) {
+      clearTimeout(shrinkTimeoutRef.current);
+    }
+    shrinkTimeoutRef.current = setTimeout(() => {
+      allowShrinkRef.current = false;
+    }, 5000);
+
+    return () => {
+      if (shrinkTimeoutRef.current) {
+        clearTimeout(shrinkTimeoutRef.current);
+      }
+    };
+  }, [zoom, showToolbar, showParameters]);
+
+  // Listen for postMessage from SSRS iframe to get content height (only if autoFitHeight is enabled)
+  React.useEffect(() => {
+    if (!autoFitHeight) {
+      return;
+    }
+
+    const handlePostMessage = (event: MessageEvent): void => {
       // Handle height messages from the SSRS iframe
       if (event.data && typeof event.data.reportHeight === 'number') {
         const newHeight = event.data.reportHeight;
-        const heightDiff = Math.abs(newHeight - lastHeightRef.current);
+        const heightDiff = newHeight - lastHeightRef.current;
 
         console.log('Height update received:', {
           newHeight,
           lastHeight: lastHeightRef.current,
-          diff: heightDiff
+          diff: heightDiff,
+          allowShrink: allowShrinkRef.current
         });
+
+        // Ignore large downward changes unless we're expecting a resize (e.g., zoom change)
+        if (heightDiff < -50 && !allowShrinkRef.current) {
+          console.log('Ignoring large downward height change (likely loading)');
+          return;
+        }
 
         // Only update if the height difference is significant (more than 5px)
         // This prevents feedback loops where small changes keep triggering updates
-        if (heightDiff > 5) {
-          console.log('Applying height change to:', newHeight);
+        if (Math.abs(heightDiff) > 5) {
+          // Add 25px buffer for any unaccounted margins/borders
+          const adjustedHeight = newHeight + 25;
+          console.log('Applying height change to:', adjustedHeight);
           lastHeightRef.current = newHeight;
-          setIframeHeight(newHeight);
-          setFlash(true);
-          setTimeout(() => setFlash(false), 300);
-        } else {
-          console.log('Ignoring small height change (threshold: 5px)');
+          setIframeHeight(adjustedHeight);
+          // allowShrinkRef is managed by the settings change effect with a 5-second timeout
         }
-      } else {
-        console.log('Message does not contain valid reportHeight property');
       }
     };
 
     window.addEventListener('message', handlePostMessage);
-    console.log('PostMessage listener attached');
+    console.log('PostMessage listener attached (autoFitHeight enabled)');
     return () => {
       window.removeEventListener('message', handlePostMessage);
       console.log('PostMessage listener removed');
     };
-  }, []);
+  }, [autoFitHeight]);
 
   // Update height if prop changes
   React.useEffect(() => {
@@ -75,7 +100,8 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
         const url = new URL(reportUrl);
         url.searchParams.set('rs:Embed', 'true');
         if (!showToolbar) {
-          url.searchParams.set('rc:Toolbar', 'false');
+          // Use CSS to hide toolbar instead of rc:Toolbar=false
+          url.searchParams.set('rc:stylesheet', 'hideToolBar');
         }
         if (!showParameters) {
           url.searchParams.set('rc:Parameters', 'Collapsed');
@@ -121,11 +147,11 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
       const params = new URLSearchParams(existingParamsStr);
 
       // Add SSRS control parameters
-      // Note: We don't set rs:Command=Render because we want the full ReportViewer.aspx page
-      // to load (with its JavaScript), not just the raw report rendering
       params.set('rs:Embed', 'true');
       if (!showToolbar) {
-        params.set('rc:Toolbar', 'false');
+        // Use CSS to hide toolbar instead of rc:Toolbar=false
+        // rc:Toolbar=false causes SSRS to use a different rendering mode that bypasses ReportViewer.aspx
+        params.set('rc:stylesheet', 'hideToolBar');
       }
       if (!showParameters) {
         params.set('rc:Parameters', 'Collapsed');
@@ -183,6 +209,7 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
 
   return (
     <div className={`${styles.reportViewerModern} ${hasTeamsContext ? styles.teams : ''}`} style={{ position: 'relative' }}>
+      {/* Height indicator - hidden for now
       <div style={{
         position: 'absolute',
         top: 4,
@@ -197,6 +224,7 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
       }}>
         Height: {iframeHeight}px
       </div>
+      */}
       <iframe
         key={buildReportUrl}
         src={buildReportUrl}

@@ -1,26 +1,37 @@
 
   (function() {
     function sendHeightToParent() {
-      // Measure the actual report div
-      var reportDiv = document.getElementById('oReportDiv');
-      var height;
+      var height = 0;
+      var oReportDiv = document.getElementById('oReportDiv');
 
-      if (reportDiv) {
-        height = Math.max(
-          reportDiv.scrollHeight,
-          reportDiv.offsetHeight,
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight
-        );
+      if (oReportDiv) {
+        // Toolbar=false: simple structure, oReportDiv directly in body
+        height = oReportDiv.scrollHeight;
+        console.log('oReportDiv scrollHeight:', height);
       } else {
-        height = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight
-        );
+        // Toolbar=true: fixedTable with toolbar/params rows + VisibleReportContent
+        var fixedTable = document.getElementById('ReportViewerControl_fixedTable');
+        var visibleContent = document.querySelector('[id^="VisibleReportContent"]');
+
+        if (fixedTable && visibleContent) {
+          var visibleContentRow = visibleContent.closest('tr');
+          var rows = fixedTable.querySelectorAll(':scope > tbody > tr');
+          var otherRowsHeight = 0;
+
+          rows.forEach(function(row) {
+            if (row !== visibleContentRow) {
+              otherRowsHeight += row.offsetHeight;
+            }
+          });
+
+          height = otherRowsHeight + visibleContent.scrollHeight;
+          console.log('Toolbar rows:', otherRowsHeight, 'Report:', visibleContent.scrollHeight, 'Total:', height);
+        }
       }
 
-      console.log('Report height:', height, 'from oReportDiv:', reportDiv ? reportDiv.scrollHeight : 'not found');
-      window.parent.postMessage({ reportHeight: height }, '*');
+      if (height > 0) {
+        window.parent.postMessage({ reportHeight: height }, '*');
+      }
     }
     if (window.self !== window.top) {
       window.addEventListener('load', sendHeightToParent);
