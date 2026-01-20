@@ -3,7 +3,7 @@
     {
       "entry": "./lib/webparts/reportViewerModern/ReportViewerModernWebPart.js",
       "manifest": "./src/webparts/reportViewerModern/ReportViewerModernWebPart.manifest.json",
-      "outputPath": "./dist/report-viewer-modern-web-part.js"
+      "outputPath": "./report-viewer-modern-web-part.js"
     }
   ],
   "externals": {},
