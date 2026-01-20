@@ -3,36 +3,8 @@
   "solution": {
     "name": "reportwebpart-client-side-solution",
     "id": "5ed70289-7078-403d-a742-4b3a89ab8a25",
-    "version": "1.0.0.0",
-    "includeClientSideAssets": true,
-    "skipFeatureDeployment": true,
-    "isDomainIsolated": false,
-    "developer": {
-      "name": "",
-      "websiteUrl": "",
-      "privacyUrl": "",
-      "termsOfUseUrl": "",
-      "mpnId": "Undefined-1.21.1"
-    },
-    "metadata": {
-      "shortDescription": {
-        "default": "reportwebpart description"
-      },
-      "longDescription": {
-        "default": "reportwebpart description"
-      },
-      "screenshotPaths": [],
-      "videoUrl": "",
-      "categories": []
-    },
-    "features": [
-      {
-        "title": "reportwebpart Feature",
-        "description": "The feature that activates elements of the reportwebpart solution.",
-        "id": "812f851b-0a39-4cec-8376-c5b71f7dd251",
-        "version": "1.0.0.0"
-      }
-    ]
+    "version": "1.0.1.0",
+    "includeClientSideAssets": true
   },
   "paths": {
     "zippedPackage": "solution/reportwebpart.sppkg"

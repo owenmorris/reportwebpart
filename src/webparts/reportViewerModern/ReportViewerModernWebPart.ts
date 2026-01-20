@@ -2,14 +2,13 @@ import * as React from 'react';
 import * as ReactDom from 'react-dom';
 import { Version } from '@microsoft/sp-core-library';
 import {
-  type IPropertyPaneConfiguration,
+  BaseClientSideWebPart,
+  IPropertyPaneConfiguration,
   PropertyPaneTextField,
   PropertyPaneToggle,
   PropertyPaneSlider,
   PropertyPaneDropdown
-} from '@microsoft/sp-property-pane';
-import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
-import { IReadonlyTheme } from '@microsoft/sp-component-base';
+} from '@microsoft/sp-webpart-base';
 
 import ReportViewerModern from './components/ReportViewerModern';
 import { IReportViewerModernProps } from './components/IReportViewerModernProps';
@@ -26,8 +25,6 @@ export interface IReportViewerModernWebPartProps {
 
 export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IReportViewerModernWebPartProps> {
 
-  private _isDarkTheme: boolean = false;
-
   public render(): void {
     // Prevent webpart container from showing scrollbars
     this.domElement.style.overflow = 'hidden';
@@ -40,33 +37,14 @@ export default class ReportViewerModernWebPart extends BaseClientSideWebPart<IRe
         showParameters: this.properties.showParameters,
         reportParameters: this.properties.reportParameters,
         height: this.properties.height || 800,
-        autoFitHeight: this.properties.autoFitHeight ?? true,
+        autoFitHeight: this.properties.autoFitHeight !== undefined ? this.properties.autoFitHeight : true,
         zoom: this.properties.zoom || '100',
-        isDarkTheme: this._isDarkTheme,
-        hasTeamsContext: !!this.context.sdks.microsoftTeams
+        isDarkTheme: false,
+        hasTeamsContext: false
       }
     );
 
     ReactDom.render(element, this.domElement);
-  }
-
-
-  protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
-    if (!currentTheme) {
-      return;
-    }
-
-    this._isDarkTheme = !!currentTheme.isInverted;
-    const {
-      semanticColors
-    } = currentTheme;
-
-    if (semanticColors) {
-      this.domElement.style.setProperty('--bodyText', semanticColors.bodyText || null);
-      this.domElement.style.setProperty('--link', semanticColors.link || null);
-      this.domElement.style.setProperty('--linkHovered', semanticColors.linkHovered || null);
-    }
-
   }
 
   protected onDispose(): void {

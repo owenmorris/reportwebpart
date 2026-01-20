@@ -1,90 +1,203 @@
 import * as React from 'react';
 import styles from './ReportViewerModern.module.scss';
-import type { IReportViewerModernProps } from './IReportViewerModernProps';
+import { IReportViewerModernProps } from './IReportViewerModernProps';
 
-const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
-  const { reportUrl, showToolbar, showParameters, reportParameters, height, autoFitHeight, zoom, hasTeamsContext } = props;
-  const [iframeHeight, setIframeHeight] = React.useState<number>(height);
-  const lastHeightRef = React.useRef<number>(height);
+export interface IReportViewerModernState {
+  iframeHeight: number;
+}
 
-  // Track whether we should allow height shrinking (reset when display settings change)
-  const allowShrinkRef = React.useRef<boolean>(false);
-  const shrinkTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+export default class ReportViewerModern extends React.Component<IReportViewerModernProps, IReportViewerModernState> {
+  private lastHeight: number;
+  private allowShrink: boolean;
+  private shrinkTimeout: number | undefined;
 
-  // Reset height tracking when display settings change (zoom, toolbar, params)
-  // This allows the height to shrink when these settings legitimately change the content size
-  React.useEffect(() => {
-    allowShrinkRef.current = true;
-    lastHeightRef.current = height;
+  constructor(props: IReportViewerModernProps) {
+    super(props);
+
+    this.state = {
+      iframeHeight: props.height
+    };
+
+    this.lastHeight = props.height;
+    this.allowShrink = false;
+    this.shrinkTimeout = undefined;
+
+    this.handlePostMessage = this.handlePostMessage.bind(this);
+  }
+
+  public componentDidMount(): void {
+    const { autoFitHeight, height } = this.props;
+
+    // Initialize allowShrink settings
+    this.resetShrinkTracking(height);
+
+    // Attach postMessage listener if autoFitHeight is enabled
+    if (autoFitHeight) {
+      window.addEventListener('message', this.handlePostMessage);
+      console.log('PostMessage listener attached (autoFitHeight enabled)');
+    }
+  }
+
+  public componentWillUnmount(): void {
+    // Clean up event listener
+    window.removeEventListener('message', this.handlePostMessage);
+    console.log('PostMessage listener removed');
+
+    // Clean up timeout
+    if (this.shrinkTimeout !== undefined) {
+      clearTimeout(this.shrinkTimeout);
+    }
+  }
+
+  public componentDidUpdate(prevProps: IReportViewerModernProps): void {
+    const { zoom, showToolbar, showParameters, height, autoFitHeight } = this.props;
+
+    // Reset height tracking when display settings change
+    if (prevProps.zoom !== zoom || prevProps.showToolbar !== showToolbar ||
+        prevProps.showParameters !== showParameters) {
+      this.resetShrinkTracking(height);
+    }
+
+    // Update height if prop changes
+    if (prevProps.height !== height) {
+      this.setState({ iframeHeight: height });
+      this.lastHeight = height;
+    }
+
+    // Handle autoFitHeight toggle
+    if (prevProps.autoFitHeight !== autoFitHeight) {
+      if (autoFitHeight) {
+        window.addEventListener('message', this.handlePostMessage);
+        console.log('PostMessage listener attached (autoFitHeight enabled)');
+      } else {
+        window.removeEventListener('message', this.handlePostMessage);
+        console.log('PostMessage listener removed');
+      }
+    }
+  }
+
+  public render(): JSX.Element {
+    const { reportUrl, hasTeamsContext } = this.props;
+    const { iframeHeight } = this.state;
+
+    if (!reportUrl) {
+      return (
+        <div
+          className={`${styles.reportViewerModern} ${hasTeamsContext ? styles.teams : ''}`}
+          style={{ padding: '20px', textAlign: 'center' }}>
+          <p>Please configure the Report URL in the web part properties.</p>
+        </div>
+      );
+    }
+
+    const builtUrl: string = this.buildReportUrl();
+
+    return (
+      <div
+        className={`${styles.reportViewerModern} ${hasTeamsContext ? styles.teams : ''}`}
+        style={{ position: 'relative' }}>
+        {/* Height indicator - hidden for now
+        <div style={{
+          position: 'absolute',
+          top: 4,
+          left: 4,
+          padding: '4px 8px',
+          backgroundColor: flash ? '#4caf50' : 'rgba(0,0,0,0.7)',
+          color: 'white',
+          fontSize: '12px',
+          borderRadius: '4px',
+          zIndex: 1000,
+          transition: 'background-color 0.3s'
+        }}>
+          Height: {iframeHeight}px
+        </div>
+        */}
+        <iframe
+          key={builtUrl}
+          src={builtUrl}
+          className={styles.iframe}
+          style={{ height: `${iframeHeight}px` }}
+          title='SSRS Report Viewer'
+        />
+      </div>
+    );
+  }
+
+  private resetShrinkTracking(height: number): void {
+    this.allowShrink = true;
+    this.lastHeight = height;
 
     // Keep allowing shrinks for 5 seconds after settings change to catch delayed updates
-    if (shrinkTimeoutRef.current) {
-      clearTimeout(shrinkTimeoutRef.current);
+    if (this.shrinkTimeout !== undefined) {
+      clearTimeout(this.shrinkTimeout);
     }
-    shrinkTimeoutRef.current = setTimeout(() => {
-      allowShrinkRef.current = false;
+    this.shrinkTimeout = window.setTimeout(() => {
+      this.allowShrink = false;
     }, 5000);
+  }
 
-    return () => {
-      if (shrinkTimeoutRef.current) {
-        clearTimeout(shrinkTimeoutRef.current);
+  private handlePostMessage(event: MessageEvent): void {
+    // Handle height messages from the SSRS iframe
+    if (event.data && typeof event.data.reportHeight === 'number') {
+      const newHeight: number = event.data.reportHeight;
+      const heightDiff: number = newHeight - this.lastHeight;
+
+      console.log('Height update received:', {
+        newHeight,
+        lastHeight: this.lastHeight,
+        diff: heightDiff,
+        allowShrink: this.allowShrink
+      });
+
+      // Ignore large downward changes unless we're expecting a resize (e.g., zoom change)
+      if (heightDiff < -50 && !this.allowShrink) {
+        console.log('Ignoring large downward height change (likely loading)');
+        return;
       }
-    };
-  }, [zoom, showToolbar, showParameters]);
 
-  // Listen for postMessage from SSRS iframe to get content height (only if autoFitHeight is enabled)
-  React.useEffect(() => {
-    if (!autoFitHeight) {
-      return;
+      // Only update if the height difference is significant (more than 5px)
+      // This prevents feedback loops where small changes keep triggering updates
+      if (Math.abs(heightDiff) > 5) {
+        // Add 25px buffer for any unaccounted margins/borders
+        const adjustedHeight: number = newHeight + 25;
+        console.log('Applying height change to:', adjustedHeight);
+        this.lastHeight = newHeight;
+        this.setState({ iframeHeight: adjustedHeight });
+        // allowShrink is managed by resetShrinkTracking with a 5-second timeout
+      }
     }
+  }
 
-    const handlePostMessage = (event: MessageEvent): void => {
-      // Handle height messages from the SSRS iframe
-      if (event.data && typeof event.data.reportHeight === 'number') {
-        const newHeight = event.data.reportHeight;
-        const heightDiff = newHeight - lastHeightRef.current;
+  private addOrUpdateParam(paramsMap: { [key: string]: string }, key: string, value: string): void {
+    paramsMap[key] = value;
+  }
 
-        console.log('Height update received:', {
-          newHeight,
-          lastHeight: lastHeightRef.current,
-          diff: heightDiff,
-          allowShrink: allowShrinkRef.current
-        });
+  private buildQueryString(paramsMap: { [key: string]: string }): string {
+    const pairs: string[] = [];
+    Object.keys(paramsMap).forEach((key: string) => {
+      pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(paramsMap[key])}`);
+    });
+    return pairs.join('&');
+  }
 
-        // Ignore large downward changes unless we're expecting a resize (e.g., zoom change)
-        if (heightDiff < -50 && !allowShrinkRef.current) {
-          console.log('Ignoring large downward height change (likely loading)');
-          return;
-        }
-
-        // Only update if the height difference is significant (more than 5px)
-        // This prevents feedback loops where small changes keep triggering updates
-        if (Math.abs(heightDiff) > 5) {
-          // Add 25px buffer for any unaccounted margins/borders
-          const adjustedHeight = newHeight + 25;
-          console.log('Applying height change to:', adjustedHeight);
-          lastHeightRef.current = newHeight;
-          setIframeHeight(adjustedHeight);
-          // allowShrinkRef is managed by the settings change effect with a 5-second timeout
-        }
+  private parseQueryString(queryString: string): { [key: string]: string } {
+    const paramsMap: { [key: string]: string } = {};
+    if (!queryString) {
+      return paramsMap;
+    }
+    const pairs: string[] = queryString.split('&');
+    pairs.forEach((pair: string) => {
+      const [key, value] = pair.split('=');
+      if (key) {
+        paramsMap[decodeURIComponent(key)] = value ? decodeURIComponent(value) : '';
       }
-    };
+    });
+    return paramsMap;
+  }
 
-    window.addEventListener('message', handlePostMessage);
-    console.log('PostMessage listener attached (autoFitHeight enabled)');
-    return () => {
-      window.removeEventListener('message', handlePostMessage);
-      console.log('PostMessage listener removed');
-    };
-  }, [autoFitHeight]);
+  private buildReportUrl(): string {
+    const { reportUrl, showToolbar, showParameters, reportParameters, zoom } = this.props;
 
-  // Update height if prop changes
-  React.useEffect(() => {
-    setIframeHeight(height);
-    lastHeightRef.current = height;
-  }, [height]);
-
-  const buildReportUrl = React.useMemo((): string => {
     if (!reportUrl) {
       return '';
     }
@@ -92,148 +205,67 @@ const ReportViewerModern: React.FC<IReportViewerModernProps> = (props) => {
     console.log('Building URL with zoom:', zoom);
 
     try {
-      // Split the URL to handle SSRS format: base?reportPath&params
-      const [baseAndPath, ...existingParams] = reportUrl.split('?');
+      const parts: string[] = reportUrl.split('?');
+      const baseAndPath: string = parts[0];
+      const existingQuery: string = parts.slice(1).join('?');
 
-      if (!existingParams.length) {
-        // No query string at all, just return the URL with our parameters
-        const url = new URL(reportUrl);
-        url.searchParams.set('rs:Embed', 'true');
-        if (!showToolbar) {
-          // Use CSS to hide toolbar instead of rc:Toolbar=false
-          url.searchParams.set('rc:stylesheet', 'hideToolBar');
-        }
-        if (!showParameters) {
-          url.searchParams.set('rc:Parameters', 'Collapsed');
-        }
-        if (zoom) {
-          url.searchParams.set('rc:Zoom', zoom);
-        }
+      let reportPath: string = '';
+      let existingParamsStr: string = '';
 
-        if (reportParameters) {
-          try {
-            const params = JSON.parse(reportParameters);
-            Object.keys(params).forEach(key => {
-              url.searchParams.set(key, params[key]);
-            });
-          } catch (e) {
-            console.warn('Invalid report parameters JSON:', e);
-          }
+      if (existingQuery) {
+        const firstParam: string = existingQuery.split('&')[0];
+        if (firstParam.charAt(0) === '/') {
+          reportPath = firstParam;
+          const remainingParams: string = existingQuery.substring(firstParam.length);
+          existingParamsStr = remainingParams.charAt(0) === '&' ?
+            remainingParams.substring(1) : remainingParams;
+        } else {
+          existingParamsStr = existingQuery;
         }
-
-        console.log('Built report URL:', url.toString());
-        return url.toString();
       }
 
-      // Handle SSRS format where report path comes after ?
-      const queryString = existingParams.join('?');
-      const firstParam = queryString.split('&')[0];
+      const paramsMap: { [key: string]: string } = this.parseQueryString(existingParamsStr);
 
-      // Check if the first parameter is a report path (starts with /)
-      let reportPath = '';
-      let existingParamsStr = '';
-
-      if (firstParam.charAt(0) === '/') {
-        // First parameter is the report path
-        reportPath = firstParam;
-        const remainingParams = queryString.substring(firstParam.length);
-        existingParamsStr = remainingParams.charAt(0) === '&' ? remainingParams.substring(1) : remainingParams;
-      } else {
-        // No report path, just regular query parameters
-        existingParamsStr = queryString;
-      }
-
-      // Build the new URL with all parameters
-      const params = new URLSearchParams(existingParamsStr);
-
-      // Add SSRS control parameters
-      params.set('rs:Embed', 'true');
+      this.addOrUpdateParam(paramsMap, 'rs:Embed', 'true');
       if (!showToolbar) {
-        // Use CSS to hide toolbar instead of rc:Toolbar=false
-        // rc:Toolbar=false causes SSRS to use a different rendering mode that bypasses ReportViewer.aspx
-        params.set('rc:stylesheet', 'hideToolBar');
+        this.addOrUpdateParam(paramsMap, 'rc:stylesheet', 'hideToolBar');
       }
       if (!showParameters) {
-        params.set('rc:Parameters', 'Collapsed');
+        this.addOrUpdateParam(paramsMap, 'rc:Parameters', 'Collapsed');
       }
       if (zoom) {
         console.log('Setting zoom parameter to:', zoom);
-        params.set('rc:Zoom', zoom);
+        this.addOrUpdateParam(paramsMap, 'rc:Zoom', zoom);
       }
 
-      // Add report parameters from props
       if (reportParameters) {
         try {
-          const customParams = JSON.parse(reportParameters);
-          Object.keys(customParams).forEach(key => {
-            params.set(key, customParams[key]);
+          const customParams: { [key: string]: string } = JSON.parse(reportParameters);
+          Object.keys(customParams).forEach((key: string) => {
+            this.addOrUpdateParam(paramsMap, key, customParams[key]);
           });
         } catch (e) {
           console.warn('Invalid report parameters JSON:', e);
         }
       }
 
-      // Construct final URL
-      const paramString = params.toString();
+      const paramString: string = this.buildQueryString(paramsMap);
+      let finalUrl: string;
+
       if (reportPath) {
-        // URL-encode the report path (encode each segment to preserve the structure)
-        // SSRS expects paths like %2fFolder%2fReport or /Folder/Report depending on server config
-        // We'll encode the entire path to be safe
-        const encodedReportPath = reportPath.split('/').map(segment =>
+        const encodedReportPath: string = reportPath.split('/').map((segment: string) =>
           segment ? encodeURIComponent(segment) : ''
         ).join('%2f');
-
-        // SSRS format: base?reportPath&params
-        const finalUrl = `${baseAndPath}?${encodedReportPath}${paramString ? '&' + paramString : ''}`;
-        console.log('Built report URL:', finalUrl);
-        return finalUrl;
+        finalUrl = `${baseAndPath}?${encodedReportPath}${paramString ? '&' + paramString : ''}`;
       } else {
-        // Standard format: base?params
-        const finalUrl = `${baseAndPath}${paramString ? '?' + paramString : ''}`;
-        console.log('Built report URL:', finalUrl);
-        return finalUrl;
+        finalUrl = `${baseAndPath}${paramString ? '?' + paramString : ''}`;
       }
+
+      console.log('Built report URL:', finalUrl);
+      return finalUrl;
     } catch (e) {
       console.error('Invalid report URL:', e);
       return reportUrl;
     }
-  }, [reportUrl, showToolbar, showParameters, reportParameters, zoom]);
-
-  if (!reportUrl) {
-    return (
-      <div className={`${styles.reportViewerModern} ${hasTeamsContext ? styles.teams : ''}`} style={{ padding: '20px', textAlign: 'center' }}>
-        <p>Please configure the Report URL in the web part properties.</p>
-      </div>
-    );
   }
-
-  return (
-    <div className={`${styles.reportViewerModern} ${hasTeamsContext ? styles.teams : ''}`} style={{ position: 'relative' }}>
-      {/* Height indicator - hidden for now
-      <div style={{
-        position: 'absolute',
-        top: 4,
-        left: 4,
-        padding: '4px 8px',
-        backgroundColor: flash ? '#4caf50' : 'rgba(0,0,0,0.7)',
-        color: 'white',
-        fontSize: '12px',
-        borderRadius: '4px',
-        zIndex: 1000,
-        transition: 'background-color 0.3s'
-      }}>
-        Height: {iframeHeight}px
-      </div>
-      */}
-      <iframe
-        key={buildReportUrl}
-        src={buildReportUrl}
-        className={styles.iframe}
-        style={{ height: `${iframeHeight}px` }}
-        title="SSRS Report Viewer"
-      />
-    </div>
-  );
-};
-
-export default ReportViewerModern;
+}
