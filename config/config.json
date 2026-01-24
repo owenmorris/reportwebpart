@@ -1,11 +1,16 @@
 {
-  "entries": [
-    {
-      "entry": "./lib/webparts/reportViewerModern/ReportViewerModernWebPart.js",
-      "manifest": "./src/webparts/reportViewerModern/ReportViewerModernWebPart.manifest.json",
-      "outputPath": "./report-viewer-modern-web-part.js"
+  "$schema": "https://dev.office.com/json-schemas/spfx-build/config.2.0.schema.json",
+  "version": "2.0",
+  "bundles": {
+    "report-viewer-modern-web-part": {
+      "components": [
+        {
+          "entrypoint": "./lib/webparts/reportViewerModern/ReportViewerModernWebPart.js",
+          "manifest": "./src/webparts/reportViewerModern/ReportViewerModernWebPart.manifest.json"
+        }
+      ]
     }
-  ],
-  "externals": {},
-  "localizedResources": {}
+  },
+  "localizedResources": {},
+  "externals": {}
 }
