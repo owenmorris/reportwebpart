@@ -204,8 +204,20 @@ export default class ReportViewerModern extends React.Component<IReportViewerMod
 
     console.log('Building URL with zoom:', zoom);
 
+    // Translate old ReportViewer.aspx format to /reports/report format
+    let translatedUrl: string = reportUrl;
+    const reportViewerPattern: RegExp = /(.*)\/ReportServer\/Pages\/ReportViewer\.aspx\?(.+)/i;
+    const match: RegExpMatchArray | null = reportUrl.match(reportViewerPattern);
+
+    if (match) {
+      const baseUrl: string = match[1]; // Everything before /ReportServer
+      const reportPath: string = match[2]; // Everything after the ?
+      translatedUrl = `${baseUrl}/reports/report${reportPath}`;
+      console.log('Translated URL from ReportViewer.aspx format:', translatedUrl);
+    }
+
     try {
-      const parts: string[] = reportUrl.split('?');
+      const parts: string[] = translatedUrl.split('?');
       const baseAndPath: string = parts[0];
       const existingQuery: string = parts.slice(1).join('?');
 

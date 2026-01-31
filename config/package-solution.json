@@ -3,7 +3,7 @@
   "solution": {
     "name": "reportwebpart-client-side-solution",
     "id": "5ed70289-7078-403d-a742-4b3a89ab8a25",
-    "version": "1.0.6.0",
+    "version": "1.0.7.0",
     "includeClientSideAssets": true
   },
   "paths": {

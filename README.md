@@ -61,6 +61,7 @@ SPFx 1.4.1 generates manifests with `dist/` path prefixes, but when `includeClie
 
 | Version | Date           | Comments                           |
 | ------- | -------------- | ---------------------------------- |
+| 1.0.7.0 | January 2026   | Auto-translate ReportViewer URLs   |
 | 1.0.6.0 | January 2026   | Fixed manifest paths for on-prem   |
 | 1.0.5.0 | January 2026   | Updated build configuration        |
 | 1.0.4.0 | January 2026   | Version bump                       |
